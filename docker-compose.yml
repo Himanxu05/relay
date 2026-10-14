@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7
+    # AOF persistence: jobs survive a Redis restart (fsync every second).
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+
+  api:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["node", "dist/demo-worker.js"]
+    environment:
+      REDIS_URL: redis://redis:6379
+    deploy:
+      replicas: 3
+    stop_grace_period: 30s
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:

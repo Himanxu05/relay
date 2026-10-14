@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Relay dashboard</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f6f8; color: #1d2330; }
+  header { background: #1d2330; color: #fff; padding: 12px 24px; display: flex; gap: 16px; align-items: center; }
+  header input { padding: 4px 8px; border-radius: 4px; border: 0; }
+  main { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .tile { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .tile .n { font-size: 26px; font-weight: 700; } .tile .l { font-size: 12px; color: #6b7280; text-transform: uppercase; }
+  .dead .n { color: #c0392b; }
+  table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 16px; border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eceef2; font-size: 13px; }
+  button { padding: 4px 10px; border: 0; border-radius: 4px; background: #2f6fed; color: #fff; cursor: pointer; }
+  code { font-size: 12px; }
+</style>
+</head>
+<body>
+<header><strong>Relay</strong> queue <input id="queue" value="emails" /> <span id="rate"></span></header>
+<main>
+  <div class="tiles" id="tiles"></div>
+  <h3>Dead-letter queue</h3>
+  <table><thead><tr><th>Job</th><th>Data</th><th>Attempts</th><th>Last error</th><th></th></tr></thead><tbody id="dead"></tbody></table>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  let lastCompleted = null;
+
+  async function refresh() {
+    const q = encodeURIComponent($("queue").value);
+    const stats = await fetch(`/queues/${q}/stats`).then((r) => r.json());
+    $("tiles").innerHTML = Object.entries(stats)
+      .map(([k, v]) => `<div class="tile ${k}"><div class="n">${v}</div><div class="l">${k}</div></div>`).join("");
+    if (lastCompleted !== null) $("rate").textContent = `${stats.completed - lastCompleted} jobs/s`;
+    lastCompleted = stats.completed;
+    const dead = await fetch(`/queues/${q}/dead?limit=20`).then((r) => r.json());
+    $("dead").innerHTML = dead.map((j) => `<tr><td><code>${esc(j.id.slice(0, 8))}</code></td><td><code>${esc(JSON.stringify(j.data))}</code></td>
+      <td>${j.attempts}/${j.maxAttempts}</td><td>${esc(j.lastError ?? "")}</td>
+      <td><button onclick="retry('${esc(j.id)}')">Retry</button></td></tr>`).join("");
+  }
+  async function retry(id) {
+    await fetch(`/queues/${encodeURIComponent($("queue").value)}/dead/${id}/retry`, { method: "POST" });
+    refresh();
+  }
+  $("queue").addEventListener("change", () => { lastCompleted = null; refresh(); });
+  refresh();
+  setInterval(refresh, 1000);
+</script>
+</body>
+</html>

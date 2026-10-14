@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Kill workers with SIGKILL while they run 5,000 jobs; fails if any job is lost.
+      - name: Chaos test
+        run: |
+          npx tsx bench/chaos.ts 5000 4 700 | tee chaos.json
+          node -e 'const r = JSON.parse(require("fs").readFileSync("chaos.json","utf8").trim().split("\n").pop()); if (r.lost !== 0) process.exit(1)'
+      - run: docker compose build
