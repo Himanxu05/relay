@@ -119,7 +119,7 @@ test/            queue semantics (with a fake clock), worker behaviour, HTTP API
 
 ## Limits
 
-Workers poll (10 ms when busy, backing off to 500 ms when idle) rather than block, so an
-idle queue adds up to ~0.5 s of pickup latency. No job priorities or cron schedules.
+When the queue is empty, workers poll (starting at 10 ms, backing off to 500 ms) rather
+than block, so a job enqueued into an idle queue can wait up to ~0.5 s to be picked up. No job priorities or cron schedules.
 Durability is whatever Redis is configured for: AOF with `everysec` can lose about 1 s of
 writes if Redis itself crashes.
